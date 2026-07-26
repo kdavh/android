@@ -153,11 +153,7 @@ class ShortcutsTile : TileService() {
                 .apply {
                     entities.forEach { entity ->
                         val cachedEntity = snapshot.entityOf(entity.entityId)
-                        val iconIIcon = if (cachedEntity != null) {
-                            cachedEntity.getIcon(this@ShortcutsTile)
-                        } else {
-                            getIcon(entity.icon, entity.domain, this@ShortcutsTile)
-                        }
+                        val iconIIcon = cachedEntity?.getIcon() ?: getIcon(entity.icon, entity.domain)
                         addIdToImageMapping(
                             entity.resourceIdIn(snapshot),
                             buildIconResource(iconIIcon, iconSize, iconSizePx),

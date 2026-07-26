@@ -4,12 +4,13 @@ import io.homeassistant.companion.android.common.data.servers.ServerManager
 import io.homeassistant.companion.android.common.data.websocket.WebSocketCore
 import io.homeassistant.companion.android.common.data.websocket.impl.WebSocketConstants.SUBSCRIBE_TYPE_ASSIST_PIPELINE_RUN
 import io.homeassistant.companion.android.common.data.websocket.impl.entities.AssistPipelineEvent
+import io.homeassistant.companion.android.common.data.websocket.impl.entities.MessageSocketResponse
 import io.homeassistant.companion.android.common.util.VOICE_SAMPLE_RATE
+import io.homeassistant.companion.android.common.util.kotlinJsonMapper
 import io.homeassistant.companion.android.database.server.Server
 import io.homeassistant.companion.android.database.server.ServerConnectionInfo
 import io.homeassistant.companion.android.database.server.ServerSessionInfo
 import io.homeassistant.companion.android.database.server.ServerUserInfo
-import io.homeassistant.companion.android.testing.unit.ConsoleLogExtension
 import io.mockk.CapturingSlot
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -24,11 +25,9 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.extension.ExtendWith
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 
-@ExtendWith(ConsoleLogExtension::class)
 class WebSocketRepositoryImplTest {
 
     private lateinit var webSocketCore: WebSocketCore
@@ -229,6 +228,47 @@ class WebSocketRepositoryImplTest {
             )
 
             assertEquals("stt", dataSlot.captured["start_stage"])
+        }
+    }
+
+    @Nested
+    inner class RegistryForDisplay {
+
+        private fun captureSentMessage(resultJson: String): CapturingSlot<Map<String, Any?>> {
+            val messageSlot = slot<Map<String, Any?>>()
+            coEvery { webSocketCore.sendMessage(capture(messageSlot)) } returns MessageSocketResponse(
+                id = 1,
+                success = true,
+                result = kotlinJsonMapper.parseToJsonElement(resultJson),
+            )
+            return messageSlot
+        }
+
+        @Test
+        fun `Given a display registry response When getting entity registry display Then sends list_for_display and decodes result`() = runTest {
+            val messageSlot = captureSentMessage(
+                """{"entity_categories": {"0": "config"}, "entities": [{"ei": "light.bed", "en": "Bed"}]}""",
+            )
+
+            val response = repository.getEntityRegistryDisplay()
+
+            assertEquals("config/entity_registry/list_for_display", messageSlot.captured["type"])
+            assertEquals("light.bed", response?.entities?.single()?.entityId)
+            assertEquals("Bed", response?.entities?.single()?.name)
+            assertEquals(mapOf(0 to "config"), response?.entityCategories)
+        }
+
+        @Test
+        fun `Given a floor registry response When getting floor registry Then sends floor_registry list and decodes result`() = runTest {
+            val messageSlot = captureSentMessage(
+                """[{"floor_id": "ground", "name": "Ground", "level": 0}]""",
+            )
+
+            val response = repository.getFloorRegistry()
+
+            assertEquals("config/floor_registry/list", messageSlot.captured["type"])
+            assertEquals("ground", response?.single()?.floorId)
+            assertEquals(0, response?.single()?.level)
         }
     }
 
